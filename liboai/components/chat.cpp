@@ -715,6 +715,15 @@ liboai::Functions::Functions(Functions&& old) noexcept {
 	old._functions = nlohmann::json::object();
 }
 
+/// Constructor to initialize from JSON
+liboai::Functions::Functions(const nlohmann::json& j) {
+    if (j.is_object() && j.contains("functions") && j["functions"].is_array()) {
+        this->_functions = j;
+    } else {
+        this->_functions["functions"] = nlohmann::json::array(); // Fallback to empty array
+    }
+}
+
 liboai::Functions& liboai::Functions::operator=(const Functions& other) {
 	this->_functions = other._functions;
 	return *this;

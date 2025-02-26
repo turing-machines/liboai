@@ -27,6 +27,8 @@ namespace liboai {
 			Functions();
 			Functions(const Functions& other);
 			Functions(Functions&& old) noexcept;
+			Functions(const nlohmann::json& j);
+
 			template <class... _Fname,
 				std::enable_if_t<std::conjunction_v<std::is_convertible<_Fname, std::string_view>...>, int> = 0>
 			Functions(_Fname... function_names) { auto result = this->AddFunctions(function_names...); }
