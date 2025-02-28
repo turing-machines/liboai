@@ -42,7 +42,7 @@
 
 namespace liboai {
 	namespace netimpl {		
-		static bool _flag = false;
+		[[maybe_unused]] static bool _flag = false;
 		
 		void ErrorCheck(CURLcode* ecodes, size_t size, std::string_view where);
 		void ErrorCheck(CURLcode ecode, std::string_view where);
@@ -251,39 +251,59 @@ namespace liboai {
 			};
 
 			class Body final : public StringHolder<Body> {
-				public:
-					Body() = default;
-					Body(const Body& other) { this->str_ = other.str_; }
-					Body(Body&& old) noexcept { this->str_ = std::move(old.str_); }
-					Body(std::string body) : StringHolder<Body>(std::move(body)) {}
-					Body(std::string_view body) : StringHolder<Body>(body) {}
-					Body(const char* body) : StringHolder<Body>(body) {}
-					Body(const char* str, size_t len) : StringHolder<Body>(str, len) {}
-					Body(const std::initializer_list<std::string> args) : StringHolder<Body>(args) {}
-					Body(const File& file) {
-						std::ifstream is(file.filepath, std::ifstream::binary);
-						if (!is) {
-							throw std::invalid_argument("Can't open the file for HTTP request body!");
-						}
-
-						is.seekg(0, std::ios::end);
-						const std::streampos length = is.tellg();
-						is.seekg(0, std::ios::beg);
-						std::string buffer;
-						buffer.resize(static_cast<size_t>(length));
-						is.read(buffer.data(), length);
-						str_ = std::move(buffer);
+			public:
+				Body() = default;
+			
+				// Copy constructor: simply initialize the base class.
+				Body(const Body& other)
+					: StringHolder<Body>(other) {}
+			
+				// Move constructor: forward to the base class move constructor.
+				Body(Body&& old) noexcept
+					: StringHolder<Body>(std::move(old)) {}
+			
+				// Constructors delegating directly to the base class.
+				Body(std::string body)
+					: StringHolder<Body>(std::move(body)) {}
+			
+				Body(std::string_view body)
+					: StringHolder<Body>(body) {}
+			
+				Body(const char* body)
+					: StringHolder<Body>(body) {}
+			
+				Body(const char* str, size_t len)
+					: StringHolder<Body>(str, len) {}
+			
+				Body(const std::initializer_list<std::string> args)
+					: StringHolder<Body>(args) {}
+			
+				// File constructor: read file content and delegate to the std::string constructor.
+				Body(const File& file) {
+					std::ifstream is(file.filepath, std::ifstream::binary);
+					if (!is) {
+						throw std::invalid_argument("Can't open the file for HTTP request body!");
 					}
-					~Body() override = default;
-
-					Body& operator=(Body&& old) noexcept {
-						this->str_ = std::move(old.str_);
-						return *this;
-					}
-					Body& operator=(const Body& other) {
-						this->str_ = other.str_;
-						return *this;
-					}
+					is.seekg(0, std::ios::end);
+					const std::streampos length = is.tellg();
+					is.seekg(0, std::ios::beg);
+					std::string buffer(static_cast<size_t>(length), '\0');
+					is.read(&buffer[0], length);
+					// Delegate assignment to the string constructor.
+					*this = Body(std::move(buffer));
+				}
+			
+				~Body() override = default;
+			
+				// Assignment operators: delegate to the base class.
+				Body& operator=(Body&& old) noexcept {
+					StringHolder<Body>::operator=(std::move(old));
+					return *this;
+				}
+				Body& operator=(const Body& other) {
+					StringHolder<Body>::operator=(other);
+					return *this;
+				}
 			};
 
 			struct Buffer final {
@@ -566,8 +586,13 @@ namespace liboai {
 			class WriteCallback final {
 				public:
 					WriteCallback() = default;
-					WriteCallback(const WriteCallback& other) : callback(other.callback), userdata(other.userdata) {}
-					WriteCallback(WriteCallback&& old) noexcept : callback(std::move(old.callback)), userdata(std::move(old.userdata)) {}
+
+					WriteCallback(const WriteCallback& other)
+						: userdata(other.userdata), callback(other.callback) {}
+
+					WriteCallback(WriteCallback&& old) noexcept
+						: userdata(std::move(old.userdata)), callback(std::move(old.callback)) {}
+
 					WriteCallback(std::function<bool(std::string data, intptr_t userdata)> p_callback, intptr_t p_userdata = 0)
 						: userdata(p_userdata), callback(std::move(p_callback)) {}
 
