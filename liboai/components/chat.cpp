@@ -125,6 +125,30 @@ void liboai::Conversation::EraseExtra() {
 	}
 }
 
+bool liboai::Conversation::AddData(std::string_view data, std::string_view role) & noexcept(false) {
+    // Only add data if it is non-empty.
+    if (!data.empty()) {
+        EraseExtra();
+        this->_conversation["messages"].push_back({ { "role", role }, { "content", data } });
+        return true; // Data added successfully.
+    }
+    return false; // Data is empty.
+}
+
+bool liboai::Conversation::AddData(std::string_view data, std::string_view role, std::string_view name) & noexcept(false) {
+    // Only add data if it is non-empty.
+    if (!data.empty()) {
+        EraseExtra();
+        this->_conversation["messages"].push_back({
+            { "role", role },
+            { "content", data },
+            { "name", name }
+        });
+        return true; // Data added successfully.
+    }
+    return false; // Data is empty.
+}
+
 bool liboai::Conversation::AddUserData(std::string_view data) & noexcept(false) {
 	// if data provided is non-empty
 	if (!data.empty()) {

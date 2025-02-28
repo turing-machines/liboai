@@ -561,6 +561,36 @@ namespace liboai {
 			*/
 			[[nodiscard]]
 			LIBOAI_EXPORT bool PopSystemData() & noexcept(false);
+		
+			/*
+				@brief Adds a message with a specified role to the conversation.
+					This method adds a message to the conversation with a custom role.
+					Use this method to add messages that are not strictly user input,
+					for example, system prompts, assistant responses, or any other designated role.
+
+				@param data       The message content to add.
+				@param role       The role associated with the message (e.g., "system", "assistant", etc.).
+
+				@returns True/False denoting whether the message was added successfully.
+			*/
+			[[nodiscard]]
+			LIBOAI_EXPORT bool AddData(std::string_view data, std::string_view role) & noexcept(false);
+
+			/*
+				@brief Adds a message with a specified role and name to the conversation.
+					This method adds a message to the conversation with a custom role and an associated name.
+					The name is required when the message is, for example, a function response,
+					where the name should identify the function.
+
+				@param data       The message content to add.
+				@param role       The role associated with the message.
+				@param name       The name associated with the message. For instance, if the role is "function",
+								this should be the name of the function whose response is provided.
+
+				@returns True/False denoting whether the message was added successfully.
+			*/
+			[[nodiscard]]
+			LIBOAI_EXPORT bool AddData(std::string_view data, std::string_view role, std::string_view name) & noexcept(false);
 
 			/*
 				@brief Adds user input to the conversation.
