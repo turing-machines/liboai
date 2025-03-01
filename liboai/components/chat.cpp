@@ -237,6 +237,8 @@ bool liboai::Conversation::PopLastResponse() & noexcept(false) {
 }
 
 bool liboai::Conversation::Update(std::string_view response) & noexcept(false) {
+    bool new_message_added = false; // Track if a new message is added
+
     // Reset previous function call state.
     if (this->_last_resp_is_fc) {
         if (this->_conversation.contains("function_call")) {
@@ -300,6 +302,7 @@ bool liboai::Conversation::Update(std::string_view response) & noexcept(false) {
                 { "role", role },
                 { "content", text_content }
             });
+            new_message_added = true;  // a new text message was added
         }
 
         // Save function call details separately and mark the flag.
@@ -312,10 +315,12 @@ bool liboai::Conversation::Update(std::string_view response) & noexcept(false) {
             { "role", role },
             { "content", text_content }
         });
+        new_message_added = true;  // a new message was added
     }
 
-    return true;
+    return new_message_added;
 }
+
 
 bool liboai::Conversation::Update(const Response& response) & noexcept(false) {
 	return this->Update(response.content);
