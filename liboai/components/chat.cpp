@@ -237,155 +237,84 @@ bool liboai::Conversation::PopLastResponse() & noexcept(false) {
 }
 
 bool liboai::Conversation::Update(std::string_view response) & noexcept(false) {
-	// reset "last response is function call" flag
-	if (this->_last_resp_is_fc) {
-		if (this->_conversation.contains("function_call")) {
-			this->_conversation.erase("function_call");
-		}
-		this->_last_resp_is_fc = false;
-	}
-	
-	// if response is non-empty
-	if (!response.empty()) {
-		nlohmann::json j = nlohmann::json::parse(response);
-		if (j.contains("choices")) { // top level, several messages
-			for (auto& choice : j["choices"].items()) {
-				if (choice.value().contains("message")) {
-					if (choice.value()["message"].contains("role") && choice.value()["message"].contains("content")) {
-						if (!choice.value()["message"]["content"].is_null()) {
-							EraseExtra();
-							this->_conversation["messages"].push_back(
-								{
-									{ "role",    choice.value()["message"]["role"]    },
-									{ "content", choice.value()["message"]["content"] }
-								}
-							);
-						}
-						else {
-							EraseExtra();
-							this->_conversation["messages"].push_back(
-								{
-									{ "role",    choice.value()["message"]["role"]    },
-									{ "content", "" }
-								}
-							);
-						}
-						
-						if (choice.value()["message"].contains("function_call")) {
-							// if a function_call is present in the response, the
-							// conversation is not updated as there is no assistant
-							// response to be added. However, we do add the function
-							// information
-							
-							this->_conversation["function_call"] = nlohmann::json::object();
-							if (choice.value()["message"]["function_call"].contains("name")) {
-								this->_conversation["function_call"]["name"] = choice.value()["message"]["function_call"]["name"];
-							}
-							if (choice.value()["message"]["function_call"].contains("arguments")) {
-								this->_conversation["function_call"]["arguments"] = choice.value()["message"]["function_call"]["arguments"];
-							}
-							
-							this->_last_resp_is_fc = true;
-						}
+    // Reset previous function call state.
+    if (this->_last_resp_is_fc) {
+        if (this->_conversation.contains("function_call")) {
+            this->_conversation.erase("function_call");
+        }
+        this->_last_resp_is_fc = false;
+    }
 
-						return true; // conversation updated successfully
-					}
-					else {
-						return false; // response is not valid
-					}
-				}
-				else {
-					return false; // no response found
-				}
-			}
-		}
-		else if (j.contains("message")) { // mid level, single message
-			if (j["message"].contains("role") && j["message"].contains("content")) {
-				if (j["message"]["content"].is_null()) {
-					EraseExtra();
-					this->_conversation["messages"].push_back(
-						{
-							{ "role",    j["message"]["role"]    },
-							{ "content", j["message"]["content"] }
-						}
-					);
-				}
-				else {
-					EraseExtra();
-					this->_conversation["messages"].push_back(
-						{
-							{ "role",    j["message"]["role"] },
-							{ "content", "" }
-						}
-					);
-				}
+    if (response.empty()) {
+        return false; // nothing to update
+    }
+    
+    nlohmann::json j;
+    try {
+        j = nlohmann::json::parse(response);
+    } catch (const std::exception& e) {
+        // JSON parsing failed.
+        return false;
+    }
 
-				if (j["message"].contains("function_call")) {
-					// if a function_call is present in the response, the
-					// conversation is not updated as there is no assistant
-					// response to be added. However, we do add the function
-					// information
-					
-					this->_conversation["function_call"] = nlohmann::json::object();
-					if (j["message"]["function_call"].contains("name")) {
-						this->_conversation["function_call"]["name"] = j["message"]["function_call"]["name"];
-					}
-					if (j["message"]["function_call"].contains("arguments")) {
-						this->_conversation["function_call"]["arguments"] = j["message"]["function_call"]["arguments"];
-					}
+    // Extract the message from different possible formats.
+    nlohmann::json message;
+    if (j.contains("choices") && j["choices"].is_array() && !j["choices"].empty()) {
+        if (!j["choices"][0].contains("message"))
+            return false;
+        message = j["choices"][0]["message"];
+    } else if (j.contains("message")) {
+        message = j["message"];
+    } else if (j.contains("role") && j.contains("content")) {
+        message = j;
+    } else {
+        return false; // response format not recognized
+    }
 
-					this->_last_resp_is_fc = true;
-				}
+    // Validate that the message has the required "role".
+    if (!message.contains("role"))
+        return false;
+    std::string role = message["role"].get<std::string>();
 
-				return true; // conversation updated successfully
-			}
-			else {
-				return false; // response is not valid
-			}
-		}
-		else if (j.contains("role") && j.contains("content")) { // low level, single message
-			if (j["message"]["content"].is_null()) {
-				EraseExtra();
-				this->_conversation["messages"].push_back(
-					{
-						{ "role",    j["message"]["role"]    },
-						{ "content", j["message"]["content"] }
-					}
-				);
-			}
-			else {
-				EraseExtra();
-				this->_conversation["messages"].push_back(
-					{
-						{ "role",    j["message"]["role"] },
-						{ "content", "" }
-					}
-				);
-			}
-			
-			if (j["message"].contains("function_call")) {
-				// if a function_call is present in the response, the
-				// conversation is not updated as there is no assistant
-				// response to be added. However, we do add the function
-				// information
-				this->_conversation["function_call"] = nlohmann::json::object();
-				if (j["message"]["function_call"].contains("name")) {
-					this->_conversation["function_call"]["name"] = j["message"]["function_call"]["name"];
-				}
-				if (j["message"]["function_call"].contains("arguments")) {
-					this->_conversation["function_call"]["arguments"] = j["message"]["function_call"]["arguments"];
-				}
+    // Retrieve text content if available.
+    std::string text_content = "";
+    if (message.contains("content") && !message["content"].is_null()) {
+        text_content = message["content"].get<std::string>();
+    }
 
-				this->_last_resp_is_fc = true;
-			}
+    // Check for a function call.
+    if (message.contains("function_call")) {
+        nlohmann::json fc = nlohmann::json::object();
+        if (message["function_call"].contains("name")) {
+            fc["name"] = message["function_call"]["name"];
+        }
+        if (message["function_call"].contains("arguments")) {
+            fc["arguments"] = message["function_call"]["arguments"];
+        }
 
-			return true; // conversation updated successfully
-		}
-		else {
-			return false; // invalid response
-		}
-	}
-	return false; // response is empty
+        // Do not append the function call JSON to text_content.
+        // If any text is provided, add it as its own message.
+        if (!text_content.empty()) {
+            EraseExtra();
+            this->_conversation["messages"].push_back({
+                { "role", role },
+                { "content", text_content }
+            });
+        }
+
+        // Save function call details separately and mark the flag.
+        this->_conversation["function_call"] = fc;
+        this->_last_resp_is_fc = true;
+    } else {
+        // No function call: add the message normally.
+        EraseExtra();
+        this->_conversation["messages"].push_back({
+            { "role", role },
+            { "content", text_content }
+        });
+    }
+
+    return true;
 }
 
 bool liboai::Conversation::Update(const Response& response) & noexcept(false) {
