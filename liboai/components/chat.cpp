@@ -994,21 +994,21 @@ bool liboai::Functions::PopParameters(std::string_view target) & noexcept(false)
 }
 
 bool liboai::Functions::PopParameters(std::string_view target, std::initializer_list<std::string_view> param_names) & noexcept(false) {
-	index i = this->GetFunctionIndex(target);
+    index i = this->GetFunctionIndex(target);
 
-	if (i != -1) {
-		if (this->_functions["functions"][i].contains("parameters")) {
-			for (auto& param_name : param_names) {
-				if (this->_functions["functions"][i]["parameters"]["properties"].contains(param_name)) {
-					this->_functions["functions"][i]["parameters"]["properties"].erase(param_name);
-				}
-			}
-
-			return true; // parameters removed successfully
-		}
-	}
-
-	return false; // parameters not removed
+    if (i != -1) {
+        if (this->_functions["functions"][i].contains("parameters")) {
+            for (auto& param_name : param_names) {
+                // Convert param_name from std::string_view to std::string
+                std::string key = std::string(param_name);
+                if (this->_functions["functions"][i]["parameters"]["properties"].contains(key)) {
+                    this->_functions["functions"][i]["parameters"]["properties"].erase(key);
+                }
+            }
+            return true; // parameters removed successfully
+        }
+    }
+    return false; // parameters not removed
 }
 
 bool liboai::Functions::PopParameters(std::string_view target, std::vector<std::string> param_names) & noexcept(false) {
