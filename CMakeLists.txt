@@ -16,7 +16,7 @@ set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 add_subdirectory(liboai)
 
 if(BUILD_EXAMPLES)
-  add_subdirectory(documentation)
+    add_subdirectory(documentation)
 endif()
 
 set_property(DIRECTORY PROPERTY VS_STARTUP_PROJECT oai)
