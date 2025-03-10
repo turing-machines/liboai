@@ -73,6 +73,36 @@ liboai::Conversation& liboai::Conversation::operator=(Conversation&& old) noexce
 	return *this;
 }
 
+bool liboai::Conversation::ClearMessages() & noexcept(false) {
+    // Check if we have messages to clear
+    if (this->_conversation.contains("messages") && !this->_conversation["messages"].empty()) {
+        // Create a new messages array
+        nlohmann::json new_messages = nlohmann::json::array();
+        
+        // Keep only system messages
+        for (const auto& message : this->_conversation["messages"]) {
+            if (message.contains("role") && message["role"] == "system") {
+                new_messages.push_back(message);
+            }
+        }
+        
+        // Replace the old messages array with the new one
+        this->_conversation["messages"] = new_messages;
+        
+        // Reset any function call state
+        if (this->_last_resp_is_fc) {
+            if (this->_conversation.contains("function_call")) {
+                this->_conversation.erase("function_call");
+            }
+            this->_last_resp_is_fc = false;
+        }
+        
+        return true; // Messages cleared successfully
+    }
+    
+    return false; // No messages to clear
+}
+
 bool liboai::Conversation::ChangeFirstSystemMessage(std::string_view new_data) & noexcept(false) {
 	if (!new_data.empty() && !this->_conversation["messages"].empty()) {
 		if (this->_conversation["messages"][0]["role"].get<std::string>() == "system") {

@@ -518,6 +518,8 @@ namespace liboai {
 
 			friend std::ostream& operator<<(std::ostream& os, const Conversation& conv);
 
+			/**/
+			bool ClearMessages() & noexcept(false);
 
 			/*
 					@brief Changes the content of the first system message
