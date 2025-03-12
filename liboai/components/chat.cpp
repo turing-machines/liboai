@@ -1,4 +1,6 @@
 #include "../include/components/chat.h"
+#include <regex>
+#include <algorithm>
 
 liboai::Conversation::Conversation() {
 	this->_conversation["messages"] = nlohmann::json::array();
@@ -314,8 +316,64 @@ bool liboai::Conversation::Update(std::string_view response) & noexcept(false) {
         text_content = message["content"].get<std::string>();
     }
 
-    // Check for a function call.
-    if (message.contains("function_call")) {
+    // Parse function call from JSON if present
+    bool has_json_function_call = message.contains("function_call") && !message["function_call"].is_null();
+    
+    // Parse embedded function call in the text content
+    bool has_embedded_function_call = false;
+    std::string clean_text_content = text_content;
+    nlohmann::json embedded_fc = nlohmann::json::object();
+    
+    // Check for embedded function call patterns
+    // Regular expression pattern to match: `plaintext functions.function_name({...})`
+    std::regex function_pattern(R"(```plaintext functions\.([a-zA-Z0-9_]+)\((\{.*?\})\)```|`plaintext functions\.([a-zA-Z0-9_]+)\((\{.*?\})\)`)",
+                               std::regex::extended);
+    
+    std::smatch matches;
+    if (std::regex_search(text_content, matches, function_pattern)) {
+        has_embedded_function_call = true;
+        
+        // Extract function name and arguments
+        std::string func_name = !matches[1].str().empty() ? matches[1].str() : matches[3].str();
+        std::string func_args = !matches[2].str().empty() ? matches[2].str() : matches[4].str();
+        
+        // Store function call details
+        embedded_fc["name"] = func_name;
+        
+        try {
+            // Parse the JSON arguments
+            embedded_fc["arguments"] = nlohmann::json::parse(func_args).dump();
+        } catch (const std::exception& e) {
+            // If parsing fails, store as raw string
+            embedded_fc["arguments"] = func_args;
+        }
+        
+        // Remove the function call from content
+        clean_text_content = text_content;
+        clean_text_content = std::regex_replace(clean_text_content, function_pattern, "");
+        
+        // Trim any trailing whitespace or empty lines
+        auto rtrim = [](std::string s) {
+            s.erase(std::find_if(s.rbegin(), s.rend(), [](unsigned char ch) {
+                return !std::isspace(ch);
+            }).base(), s.end());
+            return s;
+        };
+        clean_text_content = rtrim(clean_text_content);
+    }
+    
+    // First, add the cleaned text content as a separate message if it's not empty
+    if (!clean_text_content.empty()) {
+        EraseExtra();
+        this->_conversation["messages"].push_back({
+            { "role", role },
+            { "content", clean_text_content }
+        });
+        new_message_added = true;  // a new text message was added
+    }
+
+    // Handle function call - prioritize JSON function call over embedded one
+    if (has_json_function_call) {
         nlohmann::json fc = nlohmann::json::object();
         if (message["function_call"].contains("name")) {
             fc["name"] = message["function_call"]["name"];
@@ -324,28 +382,14 @@ bool liboai::Conversation::Update(std::string_view response) & noexcept(false) {
             fc["arguments"] = message["function_call"]["arguments"];
         }
 
-        // Do not append the function call JSON to text_content.
-        // If any text is provided, add it as its own message.
-        if (!text_content.empty()) {
-            EraseExtra();
-            this->_conversation["messages"].push_back({
-                { "role", role },
-                { "content", text_content }
-            });
-            new_message_added = true;  // a new text message was added
-        }
-
-        // Save function call details separately and mark the flag.
+        // Save function call details separately and mark the flag
         this->_conversation["function_call"] = fc;
         this->_last_resp_is_fc = true;
-    } else {
-        // No function call: add the message normally.
-        EraseExtra();
-        this->_conversation["messages"].push_back({
-            { "role", role },
-            { "content", text_content }
-        });
-        new_message_added = true;  // a new message was added
+    } 
+    else if (has_embedded_function_call) {
+        // Use the embedded function call we parsed earlier
+        this->_conversation["function_call"] = embedded_fc;
+        this->_last_resp_is_fc = true;
     }
 
     return new_message_added;
